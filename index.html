@@ -13,7 +13,9 @@
       --line: #e5e7eb;
       --accent: #2f6fed;
       --accent-text: #ffffff;
+      --accent-soft: #e8efff;
       --danger: #d64545;
+      --danger-soft: #fdecec;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -24,7 +26,9 @@
         --line: #2f333b;
         --accent: #5b8cff;
         --accent-text: #0b1020;
+        --accent-soft: #23304d;
         --danger: #ff6b6b;
+        --danger-soft: #3a2326;
       }
     }
 
@@ -37,27 +41,30 @@
       line-height: 1.5;
     }
     main {
-      max-width: 560px;
+      max-width: 600px;
       margin: 48px auto;
       padding: 0 16px;
     }
     h1 { font-size: 28px; margin: 0 0 4px; }
     .summary { color: var(--muted); margin: 0 0 24px; }
 
-    form { display: flex; gap: 8px; margin-bottom: 16px; }
-    input[type="text"] {
-      flex: 1;
-      min-width: 0;
+    input[type="text"], input[type="date"] {
       padding: 12px 14px;
       font-size: 16px;
+      font-family: inherit;
       border: 1px solid var(--line);
       border-radius: 10px;
       background: var(--card);
       color: var(--text);
+      color-scheme: light dark;
     }
-    input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    input[type="text"]:focus, input[type="date"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+    form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    form input[type="text"] { flex: 1 1 240px; min-width: 0; }
+    form input[type="date"] { flex: 0 0 auto; }
     button.add {
-      padding: 0 18px;
+      padding: 12px 18px;
       font-size: 16px;
       font-weight: 600;
       border: 0;
@@ -66,6 +73,44 @@
       color: var(--accent-text);
       cursor: pointer;
     }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .filters { display: flex; gap: 4px; }
+    .filters button {
+      padding: 6px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .filters button[aria-pressed="true"] {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    button.clear {
+      padding: 6px 10px;
+      font-size: 14px;
+      font-family: inherit;
+      border: 0;
+      background: none;
+      color: var(--muted);
+      cursor: pointer;
+      border-radius: 6px;
+    }
+    button.clear:hover:not(:disabled) { color: var(--danger); background: var(--danger-soft); }
+    button.clear:disabled { opacity: 0.4; cursor: default; }
 
     ul { list-style: none; margin: 0; padding: 0; }
     li {
@@ -78,19 +123,33 @@
       border: 1px solid var(--line);
       border-radius: 10px;
     }
-    li input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; }
-    li .text { flex: 1; word-break: break-word; }
+    li input[type="checkbox"] { flex: none; width: 20px; height: 20px; accent-color: var(--accent); cursor: pointer; }
+    li .body { flex: 1; min-width: 0; }
+    li .text { word-break: break-word; }
     li.done .text { color: var(--muted); text-decoration: line-through; }
-    li button.delete {
+    li .due { display: inline-block; margin-top: 2px; font-size: 13px; color: var(--muted); }
+    li .due.today { color: var(--accent); font-weight: 600; }
+    li .due.overdue { color: var(--danger); font-weight: 600; }
+    li.done .due { color: var(--muted); font-weight: normal; }
+
+    li .edit-fields { display: flex; flex-wrap: wrap; gap: 6px; }
+    li .edit-fields input[type="text"] { flex: 1 1 180px; min-width: 0; padding: 6px 10px; font-size: 15px; }
+    li .edit-fields input[type="date"] { padding: 6px 10px; font-size: 15px; }
+
+    li .actions { display: flex; gap: 2px; flex: none; }
+    li .actions button {
       border: 0;
       background: none;
       color: var(--muted);
       font-size: 14px;
+      font-family: inherit;
       cursor: pointer;
       padding: 4px 8px;
       border-radius: 6px;
     }
-    li button.delete:hover { color: var(--danger); background: var(--bg); }
+    li .actions button:hover { color: var(--text); background: var(--bg); }
+    li .actions button.delete:hover { color: var(--danger); background: var(--danger-soft); }
+    li .actions button.save { color: var(--accent); font-weight: 600; }
 
     .empty { text-align: center; color: var(--muted); padding: 32px 0; }
   </style>
@@ -102,85 +161,265 @@
 
     <form id="form">
       <input type="text" id="input" placeholder="할 일을 입력하세요" autocomplete="off" aria-label="새 할 일">
+      <input type="date" id="due" aria-label="마감일 (선택)">
       <button type="submit" class="add">추가</button>
     </form>
 
+    <div class="toolbar">
+      <div class="filters" role="group" aria-label="보기 필터">
+        <button type="button" data-filter="all">전체</button>
+        <button type="button" data-filter="active">진행 중</button>
+        <button type="button" data-filter="done">완료</button>
+      </div>
+      <button type="button" class="clear" id="clear">완료한 항목 지우기</button>
+    </div>
+
     <ul id="list"></ul>
-    <p class="empty" id="empty">아직 할 일이 없습니다. 위에 입력해서 추가해 보세요.</p>
+    <p class="empty" id="empty"></p>
   </main>
 
   <script>
     const STORAGE_KEY = "todos";
+    const FILTER_KEY = "todos-filter";
     const form = document.getElementById("form");
     const input = document.getElementById("input");
+    const dueInput = document.getElementById("due");
     const list = document.getElementById("list");
     const empty = document.getElementById("empty");
     const summary = document.getElementById("summary");
+    const clearBtn = document.getElementById("clear");
+    const filterButtons = document.querySelectorAll("[data-filter]");
 
-    let todos = load();
+    let todos = load(STORAGE_KEY, []);
+    let filter = load(FILTER_KEY, "all");
+    let editingId = null;
 
-    function load() {
+    function load(key, fallback) {
       try {
-        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        const value = JSON.parse(localStorage.getItem(key));
+        return value ?? fallback;
       } catch {
-        return [];
+        return fallback;
       }
     }
 
-    function save() {
+    function store(key, value) {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+        localStorage.setItem(key, JSON.stringify(value));
       } catch {
         // 저장할 수 없는 환경(사생활 보호 모드 등)에서는 그냥 넘어갑니다.
       }
     }
 
-    function render() {
-      list.innerHTML = "";
-      for (const todo of todos) {
-        const li = document.createElement("li");
-        if (todo.done) li.classList.add("done");
+    function save() {
+      store(STORAGE_KEY, todos);
+    }
 
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.checked = todo.done;
-        checkbox.setAttribute("aria-label", "완료 표시");
-        checkbox.addEventListener("change", () => {
-          todo.done = checkbox.checked;
-          save();
-          render();
-        });
+    // 같은 순간에 여러 개를 추가해도 겹치지 않도록 시간에 무작위 문자열을 붙입니다.
+    function newId() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
 
-        const text = document.createElement("span");
+    function todayString() {
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    // "2026-10-14" 형식의 마감일을 사람이 읽기 쉬운 문구와 상태로 바꿉니다.
+    function describeDue(due) {
+      const today = new Date(todayString());
+      const date = new Date(due);
+      const days = Math.round((date - today) / 86400000);
+      const [, m, d] = due.split("-").map(Number);
+      const label = `${m}월 ${d}일`;
+      if (days < 0) return { text: `${label} · ${-days}일 지남`, state: "overdue" };
+      if (days === 0) return { text: `${label} · 오늘까지`, state: "today" };
+      if (days === 1) return { text: `${label} · 내일까지`, state: "" };
+      return { text: `${label} · ${days}일 남음`, state: "" };
+    }
+
+    function visibleTodos() {
+      if (filter === "active") return todos.filter((t) => !t.done);
+      if (filter === "done") return todos.filter((t) => t.done);
+      return todos;
+    }
+
+    function startEdit(id) {
+      editingId = id;
+      render();
+      const field = list.querySelector(".edit-fields input[type='text']");
+      if (field) {
+        field.focus();
+        field.select();
+      }
+    }
+
+    function finishEdit(todo, text, due) {
+      const trimmed = text.trim();
+      if (trimmed) {
+        todo.text = trimmed;
+        todo.due = due || "";
+        save();
+      }
+      editingId = null;
+      render();
+    }
+
+    function cancelEdit() {
+      editingId = null;
+      render();
+    }
+
+    function button(label, className, onClick) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = label;
+      if (className) b.className = className;
+      b.addEventListener("click", onClick);
+      return b;
+    }
+
+    function renderItem(todo) {
+      const li = document.createElement("li");
+      if (todo.done) li.classList.add("done");
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = todo.done;
+      checkbox.setAttribute("aria-label", "완료 표시");
+      checkbox.addEventListener("change", () => {
+        todo.done = checkbox.checked;
+        save();
+        render();
+      });
+
+      const body = document.createElement("div");
+      body.className = "body";
+      const actions = document.createElement("div");
+      actions.className = "actions";
+
+      if (editingId === todo.id) {
+        const fields = document.createElement("div");
+        fields.className = "edit-fields";
+        const textField = document.createElement("input");
+        textField.type = "text";
+        textField.value = todo.text;
+        textField.setAttribute("aria-label", "할 일 수정");
+        const dueField = document.createElement("input");
+        dueField.type = "date";
+        dueField.value = todo.due || "";
+        dueField.setAttribute("aria-label", "마감일 수정");
+
+        const onKey = (e) => {
+          if (e.key === "Enter") finishEdit(todo, textField.value, dueField.value);
+          if (e.key === "Escape") cancelEdit();
+        };
+        textField.addEventListener("keydown", onKey);
+        dueField.addEventListener("keydown", onKey);
+
+        fields.append(textField, dueField);
+        body.append(fields);
+        actions.append(
+          button("저장", "save", () => finishEdit(todo, textField.value, dueField.value)),
+          button("취소", "", cancelEdit)
+        );
+      } else {
+        const text = document.createElement("div");
         text.className = "text";
         text.textContent = todo.text;
+        text.title = "더블클릭해서 수정";
+        text.addEventListener("dblclick", () => startEdit(todo.id));
+        body.append(text);
 
-        const del = document.createElement("button");
-        del.className = "delete";
-        del.textContent = "삭제";
-        del.addEventListener("click", () => {
-          todos = todos.filter((t) => t.id !== todo.id);
-          save();
-          render();
-        });
+        if (todo.due) {
+          const info = describeDue(todo.due);
+          const due = document.createElement("span");
+          due.className = "due" + (info.state ? " " + info.state : "");
+          due.textContent = info.text;
+          body.append(due);
+        }
 
-        li.append(checkbox, text, del);
-        list.append(li);
+        actions.append(
+          button("수정", "", () => startEdit(todo.id)),
+          button("삭제", "delete", () => {
+            todos = todos.filter((t) => t.id !== todo.id);
+            save();
+            render();
+          })
+        );
       }
 
+      li.append(checkbox, body, actions);
+      return li;
+    }
+
+    function render() {
+      list.innerHTML = "";
+      const shown = visibleTodos();
+      for (const todo of shown) list.append(renderItem(todo));
+
       const doneCount = todos.filter((t) => t.done).length;
+      const activeCount = todos.length - doneCount;
+      const today = todayString();
+      const overdueCount = todos.filter((t) => !t.done && t.due && t.due < today).length;
+
       summary.textContent = todos.length
-        ? `전체 ${todos.length}개 · 완료 ${doneCount}개 · 남은 일 ${todos.length - doneCount}개`
+        ? `전체 ${todos.length}개 · 완료 ${doneCount}개 · 남은 일 ${activeCount}개` +
+          (overdueCount ? ` · 마감 지남 ${overdueCount}개` : "")
         : "오늘 할 일을 정리해 보세요.";
-      empty.hidden = todos.length > 0;
+
+      const counts = { all: todos.length, active: activeCount, done: doneCount };
+      const names = { all: "전체", active: "진행 중", done: "완료" };
+      filterButtons.forEach((b) => {
+        const key = b.dataset.filter;
+        b.textContent = `${names[key]} ${counts[key]}`;
+        b.setAttribute("aria-pressed", String(key === filter));
+      });
+
+      clearBtn.disabled = doneCount === 0;
+
+      if (shown.length > 0) {
+        empty.hidden = true;
+      } else {
+        empty.hidden = false;
+        empty.textContent =
+          todos.length === 0 ? "아직 할 일이 없습니다. 위에 입력해서 추가해 보세요." :
+          filter === "active" ? "진행 중인 할 일이 없습니다. 모두 끝냈어요!" :
+          "아직 완료한 할 일이 없습니다.";
+      }
     }
 
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       const text = input.value.trim();
       if (!text) return;
-      todos.push({ id: Date.now(), text, done: false });
+      todos.push({ id: newId(), text, done: false, due: dueInput.value || "" });
       input.value = "";
+      dueInput.value = "";
+      if (filter === "done") {
+        filter = "all";
+        store(FILTER_KEY, filter);
+      }
+      save();
+      render();
+      input.focus();
+    });
+
+    filterButtons.forEach((b) =>
+      b.addEventListener("click", () => {
+        filter = b.dataset.filter;
+        store(FILTER_KEY, filter);
+        editingId = null;
+        render();
+      })
+    );
+
+    clearBtn.addEventListener("click", () => {
+      const doneCount = todos.filter((t) => t.done).length;
+      if (!doneCount) return;
+      if (!confirm(`완료한 할 일 ${doneCount}개를 지울까요?`)) return;
+      todos = todos.filter((t) => !t.done);
       save();
       render();
     });
