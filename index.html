@@ -16,6 +16,10 @@
       --accent-soft: #e8efff;
       --danger: #d64545;
       --danger-soft: #fdecec;
+      --cat-work: #2f6fed;      --cat-work-soft: #e8efff;
+      --cat-personal: #1f8a4c;  --cat-personal-soft: #e3f4ea;
+      --cat-study: #7a4fd6;     --cat-study-soft: #efe8fc;
+      --cat-shopping: #c4650f;  --cat-shopping-soft: #fdeedd;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -29,6 +33,10 @@
         --accent-soft: #23304d;
         --danger: #ff6b6b;
         --danger-soft: #3a2326;
+        --cat-work: #8fb0ff;      --cat-work-soft: #23304d;
+        --cat-personal: #6fd39a;  --cat-personal-soft: #1d3527;
+        --cat-study: #b99bff;     --cat-study-soft: #2e2547;
+        --cat-shopping: #f2a65a;  --cat-shopping-soft: #3d2c1b;
       }
     }
 
@@ -58,11 +66,47 @@
       color: var(--text);
       color-scheme: light dark;
     }
-    input[type="text"]:focus, input[type="date"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    select {
+      padding: 12px 10px;
+      font-size: 16px;
+      font-family: inherit;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--card);
+      color: var(--text);
+      color-scheme: light dark;
+      cursor: pointer;
+    }
+    input[type="text"]:focus, input[type="date"]:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
     form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-    form input[type="text"] { flex: 1 1 240px; min-width: 0; }
-    form input[type="date"] { flex: 0 0 auto; }
+    form input[type="text"] { flex: 1 1 100%; min-width: 0; }
+    form input[type="date"], form select { flex: 1 1 140px; min-width: 0; }
+    form button.add { flex: 0 0 auto; }
+
+    .view-options { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .view-options label { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
+    .view-options select { padding: 6px 8px; font-size: 14px; border-radius: 8px; }
+
+    .tag {
+      display: inline-block;
+      padding: 1px 8px;
+      margin-right: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 999px;
+      vertical-align: 1px;
+    }
+    .tag.work { color: var(--cat-work); background: var(--cat-work-soft); }
+    .tag.personal { color: var(--cat-personal); background: var(--cat-personal-soft); }
+    .tag.study { color: var(--cat-study); background: var(--cat-study-soft); }
+    .tag.shopping { color: var(--cat-shopping); background: var(--cat-shopping-soft); }
+    li[class*="cat-"] { border-left-width: 4px; }
+    li.cat-work { border-left-color: var(--cat-work); }
+    li.cat-personal { border-left-color: var(--cat-personal); }
+    li.cat-study { border-left-color: var(--cat-study); }
+    li.cat-shopping { border-left-color: var(--cat-shopping); }
+    li.done .tag { opacity: 0.6; }
     button.add {
       padding: 12px 18px;
       font-size: 16px;
@@ -134,7 +178,7 @@
 
     li .edit-fields { display: flex; flex-wrap: wrap; gap: 6px; }
     li .edit-fields input[type="text"] { flex: 1 1 180px; min-width: 0; padding: 6px 10px; font-size: 15px; }
-    li .edit-fields input[type="date"] { padding: 6px 10px; font-size: 15px; }
+    li .edit-fields input[type="date"], li .edit-fields select { padding: 6px 10px; font-size: 15px; }
 
     li .actions { display: flex; gap: 2px; flex: none; }
     li .actions button {
@@ -162,8 +206,17 @@
     <form id="form">
       <input type="text" id="input" placeholder="할 일을 입력하세요" autocomplete="off" aria-label="새 할 일">
       <input type="date" id="due" aria-label="마감일 (선택)">
+      <select id="category" aria-label="카테고리 (선택)"></select>
       <button type="submit" class="add">추가</button>
     </form>
+
+    <div class="view-options">
+      <label>카테고리 <select id="category-filter"></select></label>
+      <label>정렬 <select id="sort">
+        <option value="added">추가한 순</option>
+        <option value="due">마감일 순</option>
+      </select></label>
+    </div>
 
     <div class="toolbar">
       <div class="filters" role="group" aria-label="보기 필터">
@@ -181,9 +234,15 @@
   <script>
     const STORAGE_KEY = "todos";
     const FILTER_KEY = "todos-filter";
+    const CATEGORY_FILTER_KEY = "todos-category-filter";
+    const SORT_KEY = "todos-sort";
+    const CATEGORIES = { work: "업무", personal: "개인", study: "공부", shopping: "쇼핑" };
     const form = document.getElementById("form");
     const input = document.getElementById("input");
     const dueInput = document.getElementById("due");
+    const categoryInput = document.getElementById("category");
+    const categoryFilterSelect = document.getElementById("category-filter");
+    const sortSelect = document.getElementById("sort");
     const list = document.getElementById("list");
     const empty = document.getElementById("empty");
     const summary = document.getElementById("summary");
@@ -192,6 +251,8 @@
 
     let todos = load(STORAGE_KEY, []);
     let filter = load(FILTER_KEY, "all");
+    let categoryFilter = load(CATEGORY_FILTER_KEY, "all");
+    let sort = load(SORT_KEY, "added");
     let editingId = null;
 
     function load(key, fallback) {
@@ -213,6 +274,12 @@
 
     function save() {
       store(STORAGE_KEY, todos);
+    }
+
+    function fillCategoryOptions(select, firstLabel, firstValue) {
+      select.innerHTML = "";
+      select.append(new Option(firstLabel, firstValue));
+      for (const [key, name] of Object.entries(CATEGORIES)) select.append(new Option(name, key));
     }
 
     // 같은 순간에 여러 개를 추가해도 겹치지 않도록 시간에 무작위 문자열을 붙입니다.
@@ -239,10 +306,26 @@
       return { text: `${label} · ${days}일 남음`, state: "" };
     }
 
+    // 카테고리 필터만 적용한 목록입니다. 필터 버튼의 개수도 이 범위에서 셉니다.
+    function categoryScoped() {
+      if (categoryFilter === "all") return todos;
+      return todos.filter((t) => (t.category || "") === categoryFilter);
+    }
+
     function visibleTodos() {
-      if (filter === "active") return todos.filter((t) => !t.done);
-      if (filter === "done") return todos.filter((t) => t.done);
-      return todos;
+      let shown = categoryScoped();
+      if (filter === "active") shown = shown.filter((t) => !t.done);
+      if (filter === "done") shown = shown.filter((t) => t.done);
+      if (sort === "due") {
+        // 마감일이 빠른 순서, 마감일이 없는 일은 맨 뒤로 보냅니다.
+        shown = [...shown].sort((a, b) => {
+          if (!a.due && !b.due) return 0;
+          if (!a.due) return 1;
+          if (!b.due) return -1;
+          return a.due < b.due ? -1 : a.due > b.due ? 1 : 0;
+        });
+      }
+      return shown;
     }
 
     function startEdit(id) {
@@ -255,11 +338,12 @@
       }
     }
 
-    function finishEdit(todo, text, due) {
+    function finishEdit(todo, text, due, category) {
       const trimmed = text.trim();
       if (trimmed) {
         todo.text = trimmed;
         todo.due = due || "";
+        todo.category = category || "";
         save();
       }
       editingId = null;
@@ -283,6 +367,7 @@
     function renderItem(todo) {
       const li = document.createElement("li");
       if (todo.done) li.classList.add("done");
+      if (CATEGORIES[todo.category]) li.classList.add("cat-" + todo.category);
 
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
@@ -310,24 +395,36 @@
         dueField.type = "date";
         dueField.value = todo.due || "";
         dueField.setAttribute("aria-label", "마감일 수정");
+        const categoryField = document.createElement("select");
+        fillCategoryOptions(categoryField, "카테고리 없음", "");
+        categoryField.value = todo.category || "";
+        categoryField.setAttribute("aria-label", "카테고리 수정");
 
+        const saveEdit = () => finishEdit(todo, textField.value, dueField.value, categoryField.value);
         const onKey = (e) => {
-          if (e.key === "Enter") finishEdit(todo, textField.value, dueField.value);
+          if (e.key === "Enter") saveEdit();
           if (e.key === "Escape") cancelEdit();
         };
         textField.addEventListener("keydown", onKey);
         dueField.addEventListener("keydown", onKey);
+        categoryField.addEventListener("keydown", onKey);
 
-        fields.append(textField, dueField);
+        fields.append(textField, dueField, categoryField);
         body.append(fields);
         actions.append(
-          button("저장", "save", () => finishEdit(todo, textField.value, dueField.value)),
+          button("저장", "save", saveEdit),
           button("취소", "", cancelEdit)
         );
       } else {
         const text = document.createElement("div");
         text.className = "text";
-        text.textContent = todo.text;
+        if (CATEGORIES[todo.category]) {
+          const tag = document.createElement("span");
+          tag.className = "tag " + todo.category;
+          tag.textContent = CATEGORIES[todo.category];
+          text.append(tag);
+        }
+        text.append(todo.text);
         text.title = "더블클릭해서 수정";
         text.addEventListener("dblclick", () => startEdit(todo.id));
         body.append(text);
@@ -369,7 +466,9 @@
           (overdueCount ? ` · 마감 지남 ${overdueCount}개` : "")
         : "오늘 할 일을 정리해 보세요.";
 
-      const counts = { all: todos.length, active: activeCount, done: doneCount };
+      const scoped = categoryScoped();
+      const scopedDone = scoped.filter((t) => t.done).length;
+      const counts = { all: scoped.length, active: scoped.length - scopedDone, done: scopedDone };
       const names = { all: "전체", active: "진행 중", done: "완료" };
       filterButtons.forEach((b) => {
         const key = b.dataset.filter;
@@ -385,6 +484,7 @@
         empty.hidden = false;
         empty.textContent =
           todos.length === 0 ? "아직 할 일이 없습니다. 위에 입력해서 추가해 보세요." :
+          scoped.length === 0 ? `'${CATEGORIES[categoryFilter] || "카테고리 없음"}' 할 일이 없습니다.` :
           filter === "active" ? "진행 중인 할 일이 없습니다. 모두 끝냈어요!" :
           "아직 완료한 할 일이 없습니다.";
       }
@@ -394,12 +494,19 @@
       e.preventDefault();
       const text = input.value.trim();
       if (!text) return;
-      todos.push({ id: newId(), text, done: false, due: dueInput.value || "" });
+      const category = categoryInput.value;
+      todos.push({ id: newId(), text, done: false, due: dueInput.value || "", category });
       input.value = "";
       dueInput.value = "";
+      // 방금 추가한 일이 현재 보기에서 숨겨지지 않도록 필터를 풀어 줍니다.
       if (filter === "done") {
         filter = "all";
         store(FILTER_KEY, filter);
+      }
+      if (categoryFilter !== "all" && categoryFilter !== category) {
+        categoryFilter = "all";
+        categoryFilterSelect.value = "all";
+        store(CATEGORY_FILTER_KEY, categoryFilter);
       }
       save();
       render();
@@ -421,6 +528,26 @@
       if (!confirm(`완료한 할 일 ${doneCount}개를 지울까요?`)) return;
       todos = todos.filter((t) => !t.done);
       save();
+      render();
+    });
+
+    fillCategoryOptions(categoryInput, "카테고리 없음", "");
+    fillCategoryOptions(categoryFilterSelect, "전체", "all");
+    categoryFilterSelect.append(new Option("카테고리 없음", ""));
+    categoryFilterSelect.value = categoryFilter;
+    if (categoryFilterSelect.value !== categoryFilter) categoryFilter = "all";
+    sortSelect.value = sort;
+
+    categoryFilterSelect.addEventListener("change", () => {
+      categoryFilter = categoryFilterSelect.value;
+      store(CATEGORY_FILTER_KEY, categoryFilter);
+      editingId = null;
+      render();
+    });
+
+    sortSelect.addEventListener("change", () => {
+      sort = sortSelect.value;
+      store(SORT_KEY, sort);
       render();
     });
 
