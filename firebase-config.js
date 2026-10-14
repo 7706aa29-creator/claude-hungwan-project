@@ -3,10 +3,10 @@
 // 데이터는 firestore.rules의 보안 규칙이 지킵니다(본인 계정의 할 일만 읽고 쓸 수 있음).
 // apiKey가 비어 있으면 로그인 기능 없이 이 기기에만 저장합니다.
 export const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: "",
+  apiKey: "AIzaSyCGhfnvE3AEePI8V2diX03AaEEpCKo2zjM",
+  authDomain: "good-de2.firebaseapp.com",
+  projectId: "good-de2",
+  storageBucket: "good-de2.firebasestorage.app",
+  messagingSenderId: "840873126819",
+  appId: "1:840873126819:web:7d66b7c28ec611912bc816",
 };
