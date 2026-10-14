@@ -1,0 +1,25 @@
+rules_version = '2';
+
+// 로그인한 사람은 자기 계정(users/{본인 uid}/todos) 아래의 할 일만 읽고 쓸 수 있습니다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/todos/{todoId} {
+      function isOwner() {
+        return request.auth != null && request.auth.uid == uid;
+      }
+
+      function isValidTodo() {
+        let t = request.resource.data;
+        return t.id == todoId
+          && t.text is string && t.text.size() > 0 && t.text.size() <= 500
+          && t.done is bool
+          && t.due is string && t.due.size() <= 10
+          && t.category is string && t.category.size() <= 20
+          && t.created is number;
+      }
+
+      allow read, delete: if isOwner();
+      allow create, update: if isOwner() && isValidTodo();
+    }
+  }
+}
